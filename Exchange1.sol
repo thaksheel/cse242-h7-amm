@@ -6,6 +6,7 @@ import "@openzeppelin/contracts@4.9.3/token/ERC20/ERC20.sol";
 contract Exchange is ERC20 {
     ERC20 public token; // The paired ERC20 token
     uint256 public k; // Constant product (x * y), where x=ETH, y=ERC20
+    mapping (address => uint256) public liquidityPositions; 
 
     // Events (as specified)
     event LiquidityProvided(
@@ -61,6 +62,7 @@ contract Exchange is ERC20 {
 
         // Mint LP shares
         _mint(msg.sender, lpIssued);
+        liquidityPositions[msg.sender] += lpIssued; 
 
         // Update k = newEthBalance * newTokenBalance
         k = address(this).balance * token.balanceOf(address(this));
@@ -89,6 +91,7 @@ contract Exchange is ERC20 {
 
         // Burn LP first (effects), then external transfers (interactions)
         _burn(msg.sender, _lpToBurn);
+        liquidityPositions[msg.sender] -= _lpToBurn;
 
         // Send ETH
         (bool okEth, ) = payable(msg.sender).call{value: amountEth}("");
@@ -109,7 +112,7 @@ contract Exchange is ERC20 {
 
     // Convenience view for LP balance
     function getMyLiquidityPositions() external view returns (uint) {
-        return balanceOf(msg.sender);
+        return liquidityPositions[msg.sender];
     }
 
     // --- Estimation Helpers ---
@@ -161,9 +164,6 @@ contract Exchange is ERC20 {
         (bool okEth, ) = payable(msg.sender).call{value: ethOut}("");
         require(okEth, "ETH transfer failed");
 
-        // Update k after state changes
-        k = address(this).balance * token.balanceOf(address(this));
-
         emit SwapForEth(_amountERC20Token, ethOut);
         return ethOut;
     }
@@ -196,10 +196,7 @@ contract Exchange is ERC20 {
 
         // Send ERC20 to caller
         require(token.transfer(msg.sender, tokenOut), "Token transfer failed");
-
-        // Update k after state changes
-        k = address(this).balance * token.balanceOf(address(this));
-
+        
         emit SwapForERC20Token(tokenOut, msg.value);
         return tokenOut;
     }
